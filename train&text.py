@@ -1,3 +1,20 @@
+NAME = '16_32_d20_acstep4_warm10_CLS'
+
+# LoraConfig
+R_VALUE = 4
+LORA_ALPHA = 32
+LORA_DROPOUT = 0.05
+TASK_TYPE = "CLS"
+TARGET_MODULES= ["q_proj", "k_proj", "v_proj", 
+                 "o_proj ", "gate_proj", "up_proj" , 
+                 "down_proj", "lm_head"]
+
+# TrainingArguments
+NUM_TRAIN_EPOCHS = 8
+PER_DEVICE_TRAIN_BATCH_SIZE = 4
+
+DATASET_NUMBER = 6
+
 import torch
 from datasets import load_dataset
 from transformers import(
@@ -71,38 +88,42 @@ def train():
 
     # Lora和訓練超參的設定
     peft_config = LoraConfig(
-        r = 2, #要自己調，每個訓練集不一樣.
-        lora_alpha = 4, #r的2倍
-        lora_dropout = 0.05,
+        r = R_VALUE, #要自己調，每個訓練集不一樣.
+        lora_alpha = LORA_ALPHA, #r的2倍
+        lora_dropout = LORA_DROPOUT,
         bias = "none",
-        task_type = "CLS",
+        task_type = TASK_TYPE,
         #  seq_cls會考慮詞出現的順序，cls不會
-        target_modules= ["q_proj" , "k_proj" , "v_proj" , "o_proj " , "gate_proj" , "up_proj" , "down_proj" , "lm_head"]
-        #target_modules= ["q_proj" , "k_proj" , "v_proj" , "o_proj " , "gate_proj" , "up_proj" , "down_proj" , "lm_head"]
+        target_modules = TARGET_MODULES
+        #target_modules = ["q_proj" , "k_proj" , "v_proj" , "o_proj " , "gate_proj" , "up_proj" , "down_proj" , "lm_head"]
         #只有embed_tokens被動到
         #不一定要全選
     )
+    # optim : str or [training_args.OptimizerNames], optional, defaults to "adamw_torch"
+    # The optimizer to use: adamw_hf, adamw_torch, adamw_torch_fused, adamw_apex_fused, adamw_anyprecision or adafactor.
 
     training_arguments = TrainingArguments(
-        output_dir = "./results_t5_no_embed",
-        num_train_epochs = 5, 
-        bf16 = False,#True對GPU要求較高
-        per_device_train_batch_size = 2,
-        gradient_accumulation_steps = 2,
+        # here
+        output_dir = f"./results_t{DATASET_NUMBER}_{NAME}",
+        num_train_epochs = NUM_TRAIN_EPOCHS, 
+        bf16 = True, #True對GPU要求較高
+        per_device_train_batch_size = PER_DEVICE_TRAIN_BATCH_SIZE,
+        gradient_accumulation_steps = 4,
         gradient_checkpointing = True,
-        max_grad_norm = 0.5,
-        learning_rate = 2e-5, #有特別調小
-        weight_decay = 0.001,## 0.001->0.1
+        max_grad_norm = 1,
+        learning_rate = 1.35e-3, #有特別調小
+        weight_decay = 0.001, # 0.001->0.1
         optim = "paged_adamw_8bit",
-        max_steps = -1,# -1表示沒有限制
-        warmup_ratio = 0.03,
-        group_by_length = True, #用來提高訓練效率
-        logging_steps = 10,
+        #optim = "adamw_hf",
+        max_steps = -1, # -1表示沒有限制
+        #warmup_ratio = 0.1,
+        group_by_length = False, #用來提高訓練效率
+        logging_steps = 2,
         lr_scheduler_type = "linear",
         report_to = "wandb",
         save_strategy = "epoch",  # 每個epoch儲存一次
     )
-    #
+    
 
     # 模型微調
     trainer = SFTTrainer(
@@ -130,7 +151,7 @@ def merge():
     )
     
     # 從本地加載適配器
-    local_model_path = "results_t4/epoch5"
+    local_model_path = f"results_t{DATASET_NUMBER}_{NAME}/checkpoint-64"
     # try:
     #     local_model_path = "results_t4/epoch3"
     # except:
@@ -142,7 +163,7 @@ def merge():
     merged_model = new_model.merge_and_unload()
 
     # 保存合並後的模型
-    merged_model.save_pretrained("merged_t4_epoch5")
+    merged_model.save_pretrained(f"merged_t{DATASET_NUMBER}_{NAME}")
 def test():
     def response(user_input, model, tokenizer):
         # 确保设置 tokenizer 的 pad_token
@@ -155,7 +176,7 @@ def test():
         inputs = tokenizer([prompt], return_tensors="pt").to(device)
         streamer = TextStreamer(tokenizer, skip_prompt=True, skip_special_tokens=True)
         # 使用 model.generate 生成结果
-        output_ids = model.generate(**inputs, max_new_tokens=1024, pad_token_id=tokenizer.pad_token_id)
+        output_ids = model.generate(**inputs, max_new_tokens=248, pad_token_id=tokenizer.pad_token_id)
         # 将生成的 token ids 解码为文字
         output_text = tokenizer.decode(output_ids[0], skip_special_tokens=True)
         # 提取 response 部分的文本
@@ -164,7 +185,7 @@ def test():
 
     
     base_model_path = "taideLlama3_TAIDE_LX_8B_Chat_Alpha1"
-    merged_model_path = "merged_t4_epoch5"
+    merged_model_path = f"30_model"
     
     # 量化成4bit
     bnb_config = BitsAndBytesConfig(
@@ -194,14 +215,16 @@ def test():
     )
     
     # 讀取 xlsx 檔案
-    df = pd.read_excel("validation_data/val_2.xlsx")
-
+    df_val = pd.read_excel("validation_data/val_6.xlsx")
+    df_train = pd.read_excel("repo/train_data_5_text.xlsx")
+    start = "請閱讀文章後根據文章主旨以後面提供的標準將文章進行分類：如果文章的內容完全不涉及地層下陷或地面下陷問題，請歸類為「非描述地層下陷問題之文章」。如果文章涉及施工導致的事件，例如路面塌陷、工地事故，或是關於施工過程中的損害處理、安全管理措施、修復策略或事後的應對和改進措施，請歸類為「工地災害：損害處理、安全管理、復修策略、後續回應」。如果文章討論的是地層下陷問題，但這些問題不是由施工安全問題導致的，而是由自然事件（如地震、大雨沖刷、地基塌陷等）造成，或是起因不明的下陷事件，或是對這類事件(非施工相關)的後續應對和改進措施，請歸類為「非施工安全導致之地層下陷問題、後續及其應對措施」 ： "
+    
     # 針對每個 input 生成回答
-    # base_outputs = []
+    base_outputs = []
     merged_outputs = []
-    start = "請根據輸入的這篇新聞文章的內容，判斷其屬於哪一種類別（分別有：「應對措施」(應對措施分類中的文章是在描述為了改善地層下陷相關的問題所採取的行動，可以是政府頒布的一項政策，或是一項企劃)、「事件描述」(事件描述分類中的文章主要是關於各種原因造成的地層下陷事件，可以是講述一個地區所觀測到的地層下陷量，也可以是講述一地區突然出現的未知成因塌陷)、「事件回應」(事件回應分類中的文章是在描述相關人物針對地層下陷事件後續之的回應或是對此事件的評價)、「其他」(被分於其他類別中的文章通常僅提到地層下陷或者並未提及，主要在談論的主題與並非地層下陷。)），請判斷是以上四個類別中的哪一種:："
+    
     num=0
-    for input_text in df["input"]:
+    for input_text in df_val["input"]:
         num+=1
         merged_output = response(start+input_text, merged_model, base_tokenizer)
         print(num,":")
@@ -209,14 +232,29 @@ def test():
 
         # base_outputs.append(base_output)
         merged_outputs.append(merged_output)
-    
     # 添加生成的回答到 DataFrame
     # df["base_output"] = base_outputs
-    df["merged_output"] = merged_outputs
-
+    df_val["merged_output"] = merged_outputs
     # 保存更新後的 xlsx 檔案
-    df.to_excel("validation_t4_epoch5.xlsx", index=False)
+    df_val.to_excel(f"validation_t{DATASET_NUMBER}_{NAME}.xlsx", index=False)
+    df_val.to_excel(f"validation_t{DATASET_NUMBER}_{NAME}.xlsx", index=False)
+    # ---------------------
+    num=0
+    merged_outputs = []
+    # for input_text in df_train["input"]:
+    #     num+=1
+    #     merged_output = response(start+input_text, merged_model, base_tokenizer)
+    #     print(num,":")
+    #     print(merged_output)
+
+    #     # base_outputs.append(base_output)
+    #     merged_outputs.append(merged_output)
+    # # 添加生成的回答到 DataFrame
+    # # df["base_output"] = base_outputs
+    # df_train["merged_output"] = merged_outputs
+    # # 保存更新後的 xlsx 檔案
+    # df_train.to_excel(f"train_quiz.xlsx", index=False)
 if __name__ == "__main__":
-    train()
+    # train()
     # merge()
-    # test()
+    test()

@@ -18,7 +18,7 @@ import os,wandb
 # print(torch.cuda.device_count())
 
 # 載入模型和Tokenizer
-model_name="models/merged_model"
+model_name="taideLlama3_TAIDE_LX_8B_Chat_Alpha1"
 dataset_name="data/"
 
 # 量化成4bit
@@ -26,7 +26,7 @@ bnb_config = BitsAndBytesConfig(
     load_in_4bit=True,
     bnb_4bit_quant_type = "nf4",
     bnb_4bit_compute_dtype = torch.float16,
-    bnb_4bit_use_double_quant = False
+    bnb_4bit_use_double_quant = True
 )
 
 # 加載模型
