@@ -23,11 +23,13 @@ base_model = AutoModelForCausalLM.from_pretrained(
 )
 
 # 從本地加載適配器
-local_model_path = "results_t5_no_embed/checkpoint-200"
+# here
+local_model_path = "results_t5_alpha32/checkpoint-100"
 new_model = PeftModel.from_pretrained(base_model, local_model_path)
 
 # 合并模型權重並卸載適配器
 merged_model = new_model.merge_and_unload()
 
 # 保存合並後的模型
-merged_model.save_pretrained("merged_t5_noEmbed_epoch5")
+# here
+merged_model.save_pretrained("merged_t5_noEmbed_epoch5_alpha32")

@@ -1,3 +1,8 @@
 models
 wandb
 taideLlama3_TAIDE_LX_8B_Chat_Alpha1
+30_model
+merged_t6_16_32_d20_acstep4_warm10_CLS
+model_32
+model_43
+30_model.zip

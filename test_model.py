@@ -38,7 +38,8 @@ def response(user_input, model, tokenizer):
 
 if __name__ == "__main__":
     base_model_path = "taideLlama3_TAIDE_LX_8B_Chat_Alpha1"
-    merged_model_path = "merged_t5_epoch5"
+    # here
+    merged_model_path = "merged_t5_noEmbed_epoch5_alpha32"
     
     # 量化成4bit
     bnb_config = BitsAndBytesConfig(
@@ -91,6 +92,7 @@ if __name__ == "__main__":
     
 
     # 讀取 xlsx 檔案
+
     df = pd.read_excel("validation_data/val_5.xlsx")
 
     # 針對每個 input 生成回答
@@ -115,5 +117,6 @@ if __name__ == "__main__":
     df["merged_output"] = merged_outputs
 
     # 保存更新後的 xlsx 檔案
-    df.to_excel("validation_t5_epoch5.xlsx", index=False)
+    # here
+    df.to_excel("validation_t5_4_16_drop10_SEQ.xlsx", index=False)
     
